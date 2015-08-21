@@ -109,6 +109,61 @@ namespace Microsoft.AspNet.Proxy.Test
             Assert.Equal(HttpStatusCode.Created, responseMessage.StatusCode);
         }
 
+        [Theory]
+        [InlineData("GET", "3009")]
+        [InlineData("HEAD", "3010")]
+        [InlineData("TRACE", "3011")]
+        [InlineData("DELETE", "3012")]
+        [InlineData("POST", "3013")]
+        [InlineData("PUT", "3014")]
+        [InlineData("OPTIONS", "3015")]
+        [InlineData("NewHttpMethod", "3016")]
+
+        public async Task PassthroughRequestsCheckOverrideHeaderValues(string MethodType, string Port)
+        {
+            var options = new ProxyOptions()
+            {
+                Scheme = "http",
+                Host = "localhost",
+                Port = Port
+            };
+
+            options.BackChannelMessageHandler = new TestMessageHandler
+            {
+                Sender = req =>
+                {
+                    //IEnumerable<string> ipAddress;
+                    //req.Headers.TryGetValues("X-Forwarded-For", out ipAddress);
+                    //Assert.Equal("localhost" + Port, ipAddress.Single());
+                    IEnumerable<string> host;
+                    req.Headers.TryGetValues("X-Forwarded-Host", out host);
+                    Assert.Equal("localhost", host.Single());
+                    IEnumerable<string> protocol;
+                    req.Headers.TryGetValues("X-Forwarded-Proto", out protocol);
+                    Assert.Equal("http", protocol.Single());
+                    var response = new HttpResponseMessage(HttpStatusCode.Created);
+                    response.Headers.Add("testHeader", "testHeaderValue");
+                    response.Content = new StringContent("Response Body");
+                    return response;
+                }
+            };
+
+            var server = TestServer.Create(app =>
+            {
+                app.RunProxy(options);
+            });
+
+            var requestMessage = new HttpRequestMessage(new HttpMethod(MethodType), "");
+            var responseMessage = await server.CreateClient().SendAsync(requestMessage);
+            Assert.Equal(HttpStatusCode.Created, responseMessage.StatusCode);
+            var responseContent = responseMessage.Content.ReadAsStringAsync();
+            Assert.True(responseContent.Wait(3000) && !responseContent.IsFaulted);
+            Assert.Equal("Response Body", responseContent.Result);
+            IEnumerable<string> testHeaderValue;
+            responseMessage.Headers.TryGetValues("testHeader", out testHeaderValue);
+            Assert.Equal("testHeaderValue", testHeaderValue.Single());
+        }
+
         private class TestMessageHandler : HttpMessageHandler
         {
             public Func<HttpRequestMessage, HttpResponseMessage> Sender { get; set; }

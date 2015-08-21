@@ -80,6 +80,12 @@ namespace Microsoft.AspNet.Proxy
             var uriString = $"{_options.Scheme}://{_options.Host}:{_options.Port}{context.Request.PathBase}{context.Request.Path}{context.Request.QueryString}";
             requestMessage.RequestUri = new Uri(uriString);
             requestMessage.Method = new HttpMethod(context.Request.Method);
+            if (context.Connection.RemoteIpAddress != null)
+            {
+                requestMessage.Headers.Add("X-Forwarded-For", context.Connection.RemoteIpAddress.ToString());
+            }
+            requestMessage.Headers.Add("X-Forwarded-Host", context.Request.Host.ToString());
+            requestMessage.Headers.Add("X-Forwarded-Proto", context.Request.Scheme);
             using (var responseMessage = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted))
             {
                 context.Response.StatusCode = (int)responseMessage.StatusCode;
